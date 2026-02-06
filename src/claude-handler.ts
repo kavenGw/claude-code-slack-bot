@@ -3,6 +3,7 @@ import { query, type SDKMessage } from '@anthropic-ai/claude-code';
 import { ConversationSession } from './types';
 import { Logger } from './logger';
 import { McpManager, McpServerConfig } from './mcp-manager';
+import { getClaudeEnvDebugInfo } from './config';
 
 export class ClaudeHandler {
   private sessions: Map<string, ConversationSession> = new Map();
@@ -110,7 +111,20 @@ export class ClaudeHandler {
 
     this.logger.debug('Claude query options', options);
 
+    // Log environment variables for debugging
+    const envDebugInfo = getClaudeEnvDebugInfo();
+    this.logger.info('Claude SDK environment state before query', envDebugInfo);
+    this.logger.info('Starting Claude query', {
+      promptLength: prompt.length,
+      promptPreview: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+      workingDirectory: options.cwd || 'not set',
+      hasSessionId: !!options.resume,
+      permissionMode: options.permissionMode,
+      mcpServerCount: options.mcpServers ? Object.keys(options.mcpServers).length : 0,
+    });
+
     try {
+      this.logger.debug('Calling @anthropic-ai/claude-code query()...');
       for await (const message of query({
         prompt,
         abortController: abortController || new AbortController(),
@@ -129,7 +143,15 @@ export class ClaudeHandler {
         yield message;
       }
     } catch (error) {
+      // Log detailed error information
       this.logger.error('Error in Claude query', error);
+      this.logger.error('Error details', {
+        errorName: error instanceof Error ? error.name : 'Unknown',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        workingDirectory: options.cwd,
+        hasSessionId: !!options.resume,
+        envState: getClaudeEnvDebugInfo(),
+      });
       throw error;
     }
   }

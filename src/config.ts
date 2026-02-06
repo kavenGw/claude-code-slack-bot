@@ -50,11 +50,43 @@ export function validateConfig() {
  */
 export function applyOpenRouterConfig() {
   if (config.openRouter.enabled) {
+    console.log('[CONFIG] Applying OpenRouter configuration...');
+    console.log('[CONFIG] OpenRouter enabled:', config.openRouter.enabled);
+    console.log('[CONFIG] OpenRouter baseUrl:', config.openRouter.baseUrl);
+    console.log('[CONFIG] OpenRouter apiKey present:', !!config.openRouter.apiKey);
+    console.log('[CONFIG] OpenRouter apiKey length:', config.openRouter.apiKey?.length || 0);
+
     // Set the base URL for the Claude Code SDK to use OpenRouter
     process.env.ANTHROPIC_BASE_URL = config.openRouter.baseUrl;
+    console.log('[CONFIG] Set ANTHROPIC_BASE_URL:', process.env.ANTHROPIC_BASE_URL);
+
     // Use ANTHROPIC_AUTH_TOKEN for custom endpoints (required by Claude Code SDK)
     process.env.ANTHROPIC_AUTH_TOKEN = config.openRouter.apiKey;
+    console.log('[CONFIG] Set ANTHROPIC_AUTH_TOKEN: [REDACTED, length:', process.env.ANTHROPIC_AUTH_TOKEN?.length || 0, ']');
+
     // Clear ANTHROPIC_API_KEY to avoid conflicts with custom endpoint
+    const hadApiKey = !!process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
+    console.log('[CONFIG] Deleted ANTHROPIC_API_KEY (had value:', hadApiKey, ')');
+
+    console.log('[CONFIG] OpenRouter configuration applied successfully');
+  } else {
+    console.log('[CONFIG] OpenRouter not enabled, using default Anthropic API');
+    console.log('[CONFIG] ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
   }
+}
+
+/**
+ * Get current environment variables relevant to Claude Code SDK
+ * for debugging purposes
+ */
+export function getClaudeEnvDebugInfo(): Record<string, string | undefined> {
+  return {
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? `[REDACTED, length: ${process.env.ANTHROPIC_API_KEY.length}]` : undefined,
+    ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN ? `[REDACTED, length: ${process.env.ANTHROPIC_AUTH_TOKEN.length}]` : undefined,
+    ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+    CLAUDE_CODE_USE_BEDROCK: process.env.CLAUDE_CODE_USE_BEDROCK,
+    CLAUDE_CODE_USE_VERTEX: process.env.CLAUDE_CODE_USE_VERTEX,
+    CLAUDE_CODE_USE_OPENROUTER: process.env.CLAUDE_CODE_USE_OPENROUTER,
+  };
 }
