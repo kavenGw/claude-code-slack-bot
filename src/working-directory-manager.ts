@@ -97,7 +97,7 @@ export class WorkingDirectoryManager {
   }
 
   getWorkingDirectory(channelId: string, threadTs?: string, userId?: string): string | undefined {
-    // Priority: Thread > Channel/DM
+    // Priority: Thread > Channel/DM > BASE_DIRECTORY
     if (threadTs) {
       const threadKey = this.getConfigKey(channelId, threadTs);
       const threadConfig = this.configs.get(threadKey);
@@ -119,6 +119,16 @@ export class WorkingDirectoryManager {
         channelId,
       });
       return channelConfig.directory;
+    }
+
+    // Fall back to BASE_DIRECTORY if configured
+    if (config.baseDirectory) {
+      this.logger.debug('Using BASE_DIRECTORY as working directory', {
+        directory: config.baseDirectory,
+        channelId,
+        threadTs,
+      });
+      return config.baseDirectory;
     }
 
     this.logger.debug('No working directory configured', { channelId, threadTs });
@@ -159,21 +169,18 @@ export class WorkingDirectoryManager {
   formatDirectoryMessage(directory: string | undefined, context: string): string {
     if (directory) {
       let message = `Current working directory for ${context}: \`${directory}\``;
+      if (config.baseDirectory && directory === config.baseDirectory) {
+        message += ` (using BASE_DIRECTORY)`;
+      }
       if (config.baseDirectory) {
-        message += `\n\nBase directory: \`${config.baseDirectory}\``;
-        message += `\nYou can use relative paths like \`cwd project-name\` or absolute paths.`;
+        message += `\n\nYou can override with \`cwd project-name\` or \`cwd /absolute/path\``;
       }
       return message;
     }
-    
-    let message = `No working directory set for ${context}. Please set one using:`;
-    if (config.baseDirectory) {
-      message += `\n\`cwd project-name\` (relative to base directory)`;
-      message += `\n\`cwd /absolute/path/to/directory\` (absolute path)`;
-      message += `\n\nBase directory: \`${config.baseDirectory}\``;
-    } else {
-      message += `\n\`cwd /path/to/directory\` or \`set directory /path/to/directory\``;
-    }
+
+    let message = `No working directory available for ${context}.\n`;
+    message += `Please configure the \`BASE_DIRECTORY\` environment variable, or set one using:\n`;
+    message += `\`cwd /path/to/directory\``;
     return message;
   }
 
@@ -189,23 +196,22 @@ export class WorkingDirectoryManager {
 
   formatChannelSetupMessage(channelId: string, channelName: string): string {
     const hasBaseDir = !!config.baseDirectory;
-    
-    let message = `🏠 **Channel Working Directory Setup**\n\n`;
-    message += `Please set the default working directory for #${channelName}:\n\n`;
-    
+
+    let message = `🏠 **Working Directory for #${channelName}**\n\n`;
+
     if (hasBaseDir) {
-      message += `**Options:**\n`;
-      message += `• \`cwd project-name\` (relative to: \`${config.baseDirectory}\`)\n`;
+      message += `Using BASE_DIRECTORY: \`${config.baseDirectory}\`\n\n`;
+      message += `**Override options:**\n`;
+      message += `• \`cwd project-name\` (relative to base directory)\n`;
       message += `• \`cwd /absolute/path/to/project\` (absolute path)\n\n`;
     } else {
-      message += `**Usage:**\n`;
+      message += `No BASE_DIRECTORY configured. Please set a working directory:\n\n`;
       message += `• \`cwd /path/to/project\`\n`;
       message += `• \`set directory /path/to/project\`\n\n`;
     }
-    
-    message += `This becomes the default for all conversations in this channel.\n`;
-    message += `Individual threads can override this by mentioning me with a different \`cwd\` command.`;
-    
+
+    message += `Individual threads can use a different directory by mentioning me with a \`cwd\` command.`;
+
     return message;
   }
 }

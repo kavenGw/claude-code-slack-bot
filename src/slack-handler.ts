@@ -155,31 +155,12 @@ export class SlackHandler {
       isDM ? user : undefined
     );
 
-    // Working directory is always required
+    // Working directory is required - this only fails if BASE_DIRECTORY is not configured
     if (!workingDirectory) {
-      let errorMessage = `⚠️ No working directory set. `;
-      
-      if (!isDM && !this.workingDirManager.hasChannelWorkingDirectory(channel)) {
-        // No channel default set
-        errorMessage += `Please set a default working directory for this channel first using:\n`;
-        if (config.baseDirectory) {
-          errorMessage += `\`cwd project-name\` or \`cwd /absolute/path\`\n\n`;
-          errorMessage += `Base directory: \`${config.baseDirectory}\``;
-        } else {
-          errorMessage += `\`cwd /path/to/directory\``;
-        }
-      } else if (thread_ts) {
-        // In thread but no thread-specific directory
-        errorMessage += `You can set a thread-specific working directory using:\n`;
-        if (config.baseDirectory) {
-          errorMessage += `\`@claudebot cwd project-name\` or \`@claudebot cwd /absolute/path\``;
-        } else {
-          errorMessage += `\`@claudebot cwd /path/to/directory\``;
-        }
-      } else {
-        errorMessage += `Please set one first using:\n\`cwd /path/to/directory\``;
-      }
-      
+      let errorMessage = `⚠️ No working directory available.\n\n`;
+      errorMessage += `Please configure the \`BASE_DIRECTORY\` environment variable, or set a working directory using:\n`;
+      errorMessage += `\`cwd /path/to/directory\``;
+
       await say({
         text: errorMessage,
         thread_ts: thread_ts || ts,
@@ -672,22 +653,21 @@ export class SlackHandler {
       });
 
       const channelName = (channelInfo.channel as any)?.name || 'this channel';
-      
+
       let welcomeMessage = `👋 Hi! I'm Claude Code, your AI coding assistant.\n\n`;
-      welcomeMessage += `To get started, I need to know the default working directory for #${channelName}.\n\n`;
-      
+
       if (config.baseDirectory) {
-        welcomeMessage += `You can use:\n`;
-        welcomeMessage += `• \`cwd project-name\` (relative to base directory: \`${config.baseDirectory}\`)\n`;
+        welcomeMessage += `I'm ready to help with #${channelName}!\n\n`;
+        welcomeMessage += `*Working directory:* \`${config.baseDirectory}\`\n\n`;
+        welcomeMessage += `You can override this for specific threads using:\n`;
+        welcomeMessage += `• \`cwd project-name\` (relative to base directory)\n`;
         welcomeMessage += `• \`cwd /absolute/path/to/project\` (absolute path)\n\n`;
       } else {
-        welcomeMessage += `Please set it using:\n`;
+        welcomeMessage += `To get started, please set a working directory using:\n`;
         welcomeMessage += `• \`cwd /path/to/project\` or \`set directory /path/to/project\`\n\n`;
       }
-      
-      welcomeMessage += `This will be the default working directory for this channel. `;
-      welcomeMessage += `You can always override it for specific threads by mentioning me with a different \`cwd\` command.\n\n`;
-      welcomeMessage += `Once set, you can ask me to help with code reviews, file analysis, debugging, and more!`;
+
+      welcomeMessage += `Mention me to ask for help with code reviews, file analysis, debugging, and more!`;
 
       await say({
         text: welcomeMessage,
