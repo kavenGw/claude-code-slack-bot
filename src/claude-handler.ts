@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { query, type SDKMessage } from '@anthropic-ai/claude-code';
+import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { ConversationSession } from './types';
 import { Logger } from './logger';
 import { McpManager, McpServerConfig } from './mcp-manager';
@@ -42,8 +42,17 @@ export class ClaudeHandler {
     slackContext?: { channel: string; threadTs?: string; user: string }
   ): AsyncGenerator<SDKMessage, void, unknown> {
     const options: any = {
-      outputFormat: 'stream-json',
+      abortController: abortController || new AbortController(),
       permissionMode: slackContext ? 'default' : 'bypassPermissions',
+      allowDangerouslySkipPermissions: !slackContext,
+      // 使用 Claude Code 的完整系统提示和工具集
+      systemPrompt: { type: 'preset', preset: 'claude_code' },
+      // 加载项目的 CLAUDE.md 和用户设置
+      settingSources: ['user', 'project', 'local'] as any,
+      // 捕获子进程 stderr 到日志
+      stderr: (data: string) => {
+        this.logger.error('Claude CLI stderr', { stderr: data.trim() });
+      },
     };
 
     // Add permission prompt tool if we have Slack context
@@ -58,11 +67,9 @@ export class ClaudeHandler {
 
     // Add MCP server configuration if available
     const mcpServers = this.mcpManager.getServerConfiguration();
-    
+
     // Add permission prompt server if we have Slack context
     if (slackContext) {
-      // Resolve the permission MCP server path relative to the project root
-      // This works whether running via tsx (dev) or compiled JS (prod)
       const permissionServerPath = path.resolve(process.cwd(), 'src', 'permission-mcp-server.ts');
       const permissionServer = {
         'permission-prompt': {
@@ -74,7 +81,7 @@ export class ClaudeHandler {
           }
         }
       };
-      
+
       if (mcpServers) {
         options.mcpServers = { ...mcpServers, ...permissionServer };
       } else {
@@ -83,9 +90,8 @@ export class ClaudeHandler {
     } else if (mcpServers && Object.keys(mcpServers).length > 0) {
       options.mcpServers = mcpServers;
     }
-    
+
     if (options.mcpServers && Object.keys(options.mcpServers).length > 0) {
-      // Allow all MCP tools by default, plus permission prompt tool
       const defaultMcpTools = this.mcpManager.getDefaultAllowedTools();
       if (slackContext) {
         defaultMcpTools.push('mcp__permission-prompt');
@@ -93,7 +99,7 @@ export class ClaudeHandler {
       if (defaultMcpTools.length > 0) {
         options.allowedTools = defaultMcpTools;
       }
-      
+
       this.logger.debug('Added MCP configuration to options', {
         serverCount: Object.keys(options.mcpServers).length,
         servers: Object.keys(options.mcpServers),
@@ -111,7 +117,6 @@ export class ClaudeHandler {
 
     this.logger.debug('Claude query options', options);
 
-    // Log environment variables for debugging
     const envDebugInfo = getClaudeEnvDebugInfo();
     this.logger.info('Claude SDK environment state before query', envDebugInfo);
     this.logger.info('Starting Claude query', {
@@ -124,16 +129,15 @@ export class ClaudeHandler {
     });
 
     try {
-      this.logger.debug('Calling @anthropic-ai/claude-code query()...');
+      this.logger.debug('Calling @anthropic-ai/claude-agent-sdk query()...');
       for await (const message of query({
         prompt,
-        abortController: abortController || new AbortController(),
         options,
       })) {
         if (message.type === 'system' && message.subtype === 'init') {
           if (session) {
             session.sessionId = message.session_id;
-            this.logger.info('Session initialized', { 
+            this.logger.info('Session initialized', {
               sessionId: message.session_id,
               model: (message as any).model,
               tools: (message as any).tools?.length || 0,
@@ -143,16 +147,46 @@ export class ClaudeHandler {
         yield message;
       }
     } catch (error) {
-      // Log detailed error information
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error in Claude query', error);
       this.logger.error('Error details', {
         errorName: error instanceof Error ? error.name : 'Unknown',
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage,
         workingDirectory: options.cwd,
         hasSessionId: !!options.resume,
         envState: getClaudeEnvDebugInfo(),
       });
+
+      if (errorMessage.includes('exited with code')) {
+        await this.diagnoseConnectionFailure();
+      }
+
       throw error;
+    }
+  }
+
+  private async diagnoseConnectionFailure() {
+    const baseUrl = process.env.ANTHROPIC_BASE_URL;
+    if (!baseUrl) return;
+
+    this.logger.info('Diagnosing API endpoint connectivity...', { baseUrl });
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(baseUrl, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      this.logger.info('API endpoint reachable', {
+        status: response.status,
+        statusText: response.statusText,
+      });
+    } catch (fetchError) {
+      this.logger.error('API endpoint unreachable', {
+        baseUrl,
+        error: fetchError instanceof Error ? fetchError.message : String(fetchError),
+      });
     }
   }
 
