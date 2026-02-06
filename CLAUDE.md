@@ -2,6 +2,18 @@
 
 This is a TypeScript-based Slack bot that integrates with the Claude Code SDK to provide AI-powered coding assistance directly within Slack workspaces.
 
+## Platform Requirements
+
+**Supported Platforms:**
+- macOS (native)
+- Linux (native)
+- Windows via WSL (Windows Subsystem for Linux)
+
+**Not Supported:**
+- Native Windows (PowerShell, CMD, Windows Terminal in Windows mode)
+
+The Claude Code SDK requires a Unix-like environment with native system calls. Windows users must use WSL. See [WINDOWS.md](WINDOWS.md) for complete setup instructions.
+
 ## Project Overview
 
 The bot allows users to interact with Claude Code through Slack, providing real-time coding assistance, file analysis, code reviews, and project management capabilities. It supports both direct messages and channel conversations, with sophisticated working directory management and task tracking.

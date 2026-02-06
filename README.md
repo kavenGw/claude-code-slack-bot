@@ -2,6 +2,8 @@
 
 A Slack bot that integrates with Claude Code SDK to provide AI-powered coding assistance directly in your Slack workspace.
 
+> **⚠️ Windows Users**: This project requires WSL (Windows Subsystem for Linux) to run on Windows. Native Windows is not supported. See the [Windows Setup Guide](WINDOWS.md) for detailed instructions.
+
 ## Features
 
 - 🤖 Direct message support - chat with the bot privately
@@ -15,17 +17,22 @@ A Slack bot that integrates with Claude Code SDK to provide AI-powered coding as
 
 - Node.js 18+ installed
 - A Slack workspace where you can install apps
-- Claude Code
+- Claude Code SDK
+- **macOS, Linux, or WSL (Windows users must use WSL)** - See [Windows Setup Guide](WINDOWS.md)
 
 ## Setup
 
 ### 1. Clone and Install
+
+**Windows Users:** You MUST use WSL. See [INSTALL.md](INSTALL.md) or [WINDOWS.md](WINDOWS.md) for detailed instructions.
 
 ```bash
 git clone <your-repo>
 cd claude-code-slack
 npm install
 ```
+
+If you encounter the error "Claude Code is not supported on Windows", you need to install and use WSL. See the [Installation Guide](INSTALL.md).
 
 ### 2. Create Slack App
 
@@ -273,6 +280,18 @@ src/
 - `npm run prod` - Run production build
 
 ## Troubleshooting
+
+### Windows: "Error: Claude Code is not supported on Windows"
+
+**This is the most common Windows issue.** The error occurs when you try to run `npm install` from PowerShell, CMD, or native Windows Terminal.
+
+**Solution:**
+1. Install WSL (Windows Subsystem for Linux): `wsl --install` in PowerShell as Administrator
+2. Open WSL terminal: Type `wsl` or use Windows Terminal with Ubuntu profile
+3. Install Node.js in WSL (see [Windows Setup Guide](WINDOWS.md))
+4. Run `npm install` from the WSL terminal, not Windows
+
+**See the complete [Windows Setup Guide](WINDOWS.md) for detailed instructions.**
 
 ### Bot not responding
 1. Check that the bot is running (`npm run dev`)
