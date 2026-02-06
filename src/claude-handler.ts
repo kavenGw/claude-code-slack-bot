@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { query, type SDKMessage } from '@anthropic-ai/claude-code';
 import { ConversationSession } from './types';
 import { Logger } from './logger';
@@ -59,10 +60,13 @@ export class ClaudeHandler {
     
     // Add permission prompt server if we have Slack context
     if (slackContext) {
+      // Resolve the permission MCP server path relative to the project root
+      // This works whether running via tsx (dev) or compiled JS (prod)
+      const permissionServerPath = path.resolve(process.cwd(), 'src', 'permission-mcp-server.ts');
       const permissionServer = {
         'permission-prompt': {
           command: 'npx',
-          args: ['tsx', '/Users/marcelpociot/Experiments/claude-code-slack/src/permission-mcp-server.ts'],
+          args: ['tsx', permissionServerPath],
           env: {
             SLACK_BOT_TOKEN: process.env.SLACK_BOT_TOKEN,
             SLACK_CONTEXT: JSON.stringify(slackContext)
