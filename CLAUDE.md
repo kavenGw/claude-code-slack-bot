@@ -87,9 +87,24 @@ BASE_DIRECTORY=/Users/username/Code/
 CLAUDE_CODE_USE_BEDROCK=1
 CLAUDE_CODE_USE_VERTEX=1
 
+# OpenRouter API Provider
+CLAUDE_CODE_USE_OPENROUTER=1
+OPENROUTER_API_KEY=your-openrouter-api-key
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
 # Development
 DEBUG=true
 ```
+
+### Using OpenRouter
+
+OpenRouter provides a unified API interface for multiple AI models. To use OpenRouter:
+
+1. Set `CLAUDE_CODE_USE_OPENROUTER=1` to enable OpenRouter
+2. Set `OPENROUTER_API_KEY` to your OpenRouter API key
+3. Optionally set `OPENROUTER_BASE_URL` (defaults to `https://openrouter.ai/api/v1`)
+
+When OpenRouter is enabled, the bot will route Claude API requests through OpenRouter's proxy service.
 
 ## Slack App Configuration
 

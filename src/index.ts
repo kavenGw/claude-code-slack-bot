@@ -1,5 +1,5 @@
 import { App } from '@slack/bolt';
-import { config, validateConfig } from './config';
+import { config, validateConfig, applyOpenRouterConfig } from './config';
 import { ClaudeHandler } from './claude-handler';
 import { SlackHandler } from './slack-handler';
 import { McpManager } from './mcp-manager';
@@ -12,10 +12,14 @@ async function start() {
     // Validate configuration
     validateConfig();
 
+    // Apply OpenRouter configuration if enabled
+    applyOpenRouterConfig();
+
     logger.info('Starting Claude Code Slack bot', {
       debug: config.debug,
       useBedrock: config.claude.useBedrock,
       useVertex: config.claude.useVertex,
+      useOpenRouter: config.openRouter.enabled,
     });
 
     // Initialize Slack app
@@ -43,7 +47,9 @@ async function start() {
     logger.info('Configuration:', {
       usingBedrock: config.claude.useBedrock,
       usingVertex: config.claude.useVertex,
-      usingAnthropicAPI: !config.claude.useBedrock && !config.claude.useVertex,
+      usingOpenRouter: config.openRouter.enabled,
+      usingAnthropicAPI: !config.claude.useBedrock && !config.claude.useVertex && !config.openRouter.enabled,
+      openRouterBaseUrl: config.openRouter.enabled ? config.openRouter.baseUrl : undefined,
       debugMode: config.debug,
       baseDirectory: config.baseDirectory || 'not set',
       mcpServers: mcpConfig ? Object.keys(mcpConfig.mcpServers).length : 0,
