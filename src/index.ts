@@ -1,5 +1,5 @@
 import { App } from '@slack/bolt';
-import { config, validateConfig, applyOpenRouterConfig } from './config';
+import { config, validateConfig, applyOpenRouterConfig, getClaudeEnvDebugInfo } from './config';
 import { ClaudeHandler } from './claude-handler';
 import { SlackHandler } from './slack-handler';
 import { McpManager } from './mcp-manager';
@@ -10,10 +10,16 @@ const logger = new Logger('Main');
 async function start() {
   try {
     // Validate configuration
+    logger.info('Validating configuration...');
     validateConfig();
+    logger.info('Configuration validated successfully');
 
     // Apply OpenRouter configuration if enabled
+    logger.info('Applying OpenRouter configuration (if enabled)...');
     applyOpenRouterConfig();
+
+    // Log Claude SDK environment state after configuration
+    logger.info('Claude SDK environment state after configuration:', getClaudeEnvDebugInfo());
 
     logger.info('Starting Claude Code Slack bot', {
       debug: config.debug,
