@@ -15,6 +15,11 @@ export const config = {
     useBedrock: process.env.CLAUDE_CODE_USE_BEDROCK === '1',
     useVertex: process.env.CLAUDE_CODE_USE_VERTEX === '1',
   },
+  openRouter: {
+    enabled: process.env.CLAUDE_CODE_USE_OPENROUTER === '1',
+    apiKey: process.env.OPENROUTER_API_KEY || '',
+    baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+  },
   baseDirectory: process.env.BASE_DIRECTORY || '',
   debug: process.env.DEBUG === 'true' || process.env.NODE_ENV === 'development',
 };
@@ -27,8 +32,27 @@ export function validateConfig() {
   ];
 
   const missing = required.filter((key) => !process.env[key]);
-  
+
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+
+  // Validate OpenRouter configuration if enabled
+  if (config.openRouter.enabled && !config.openRouter.apiKey) {
+    throw new Error('OPENROUTER_API_KEY is required when CLAUDE_CODE_USE_OPENROUTER=1');
+  }
+}
+
+/**
+ * Apply OpenRouter configuration by setting environment variables
+ * that the Claude Code SDK will use.
+ * Must be called before any Claude Code SDK operations.
+ */
+export function applyOpenRouterConfig() {
+  if (config.openRouter.enabled) {
+    // Set the base URL for the Anthropic SDK to use OpenRouter
+    process.env.ANTHROPIC_BASE_URL = config.openRouter.baseUrl;
+    // Use OpenRouter API key instead of Anthropic API key
+    process.env.ANTHROPIC_API_KEY = config.openRouter.apiKey;
   }
 }
