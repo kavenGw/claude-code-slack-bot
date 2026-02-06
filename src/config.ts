@@ -50,9 +50,11 @@ export function validateConfig() {
  */
 export function applyOpenRouterConfig() {
   if (config.openRouter.enabled) {
-    // Set the base URL for the Anthropic SDK to use OpenRouter
+    // Set the base URL for the Claude Code SDK to use OpenRouter
     process.env.ANTHROPIC_BASE_URL = config.openRouter.baseUrl;
-    // Use OpenRouter API key instead of Anthropic API key
-    process.env.ANTHROPIC_API_KEY = config.openRouter.apiKey;
+    // Use ANTHROPIC_AUTH_TOKEN for custom endpoints (required by Claude Code SDK)
+    process.env.ANTHROPIC_AUTH_TOKEN = config.openRouter.apiKey;
+    // Clear ANTHROPIC_API_KEY to avoid conflicts with custom endpoint
+    delete process.env.ANTHROPIC_API_KEY;
   }
 }

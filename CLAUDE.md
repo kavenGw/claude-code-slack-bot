@@ -71,10 +71,10 @@ The bot allows users to interact with Claude Code through Slack, providing real-
 ```env
 # Slack App Configuration
 SLACK_BOT_TOKEN=xoxb-your-bot-token
-SLACK_APP_TOKEN=xapp-your-app-token  
+SLACK_APP_TOKEN=xapp-your-app-token
 SLACK_SIGNING_SECRET=your-signing-secret
 
-# Claude Code Configuration
+# Claude Code Configuration (required unless using OpenRouter/Bedrock/Vertex)
 ANTHROPIC_API_KEY=your-anthropic-api-key
 ```
 
@@ -104,7 +104,7 @@ OpenRouter provides a unified API interface for multiple AI models. To use OpenR
 2. Set `OPENROUTER_API_KEY` to your OpenRouter API key
 3. Optionally set `OPENROUTER_BASE_URL` (defaults to `https://openrouter.ai/api/v1`)
 
-When OpenRouter is enabled, the bot will route Claude API requests through OpenRouter's proxy service.
+**Note:** When OpenRouter is enabled, `ANTHROPIC_API_KEY` is not required. The bot internally sets `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL` for the Claude Code SDK to use OpenRouter's proxy service.
 
 ## Slack App Configuration
 
