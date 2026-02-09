@@ -1,17 +1,25 @@
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { ConversationSession } from './types';
 import { Logger } from './logger';
-import { McpManager, McpServerConfig } from './mcp-manager';
-import { getClaudeEnvDebugInfo } from './config';
+import { McpManager } from './mcp-manager';
+import { config, getClaudeEnvDebugInfo } from './config';
+import { ClaudeLocalHandler } from './claude-local-handler';
 
 export class ClaudeHandler {
   private sessions: Map<string, ConversationSession> = new Map();
   private logger = new Logger('ClaudeHandler');
   private mcpManager: McpManager;
+  private localHandler?: ClaudeLocalHandler;
 
   constructor(mcpManager: McpManager) {
     this.mcpManager = mcpManager;
+    if (config.claude.mode === 'local') {
+      this.localHandler = new ClaudeLocalHandler();
+      this.logger.info('Using local Claude CLI mode');
+    }
   }
 
   getSessionKey(userId: string, channelId: string, threadTs?: string): string {
@@ -39,23 +47,39 @@ export class ClaudeHandler {
     session?: ConversationSession,
     abortController?: AbortController,
     workingDirectory?: string,
-    slackContext?: { channel: string; threadTs?: string; user: string }
+    slackContext?: { channel: string; threadTs?: string; user: string },
+    appendSystemPrompt?: string,
   ): AsyncGenerator<SDKMessage, void, unknown> {
+    if (this.localHandler) {
+      yield* this.streamQueryLocal(prompt, session, abortController, workingDirectory, slackContext, appendSystemPrompt);
+    } else {
+      yield* this.streamQuerySDK(prompt, session, abortController, workingDirectory, slackContext, appendSystemPrompt);
+    }
+  }
+
+  private async *streamQuerySDK(
+    prompt: string,
+    session?: ConversationSession,
+    abortController?: AbortController,
+    workingDirectory?: string,
+    slackContext?: { channel: string; threadTs?: string; user: string },
+    appendSystemPrompt?: string,
+  ): AsyncGenerator<SDKMessage, void, unknown> {
+    const systemPrompt: any = appendSystemPrompt
+      ? { type: 'preset', preset: 'claude_code', append: appendSystemPrompt }
+      : { type: 'preset', preset: 'claude_code' };
+
     const options: any = {
       abortController: abortController || new AbortController(),
       permissionMode: slackContext ? 'default' : 'bypassPermissions',
       allowDangerouslySkipPermissions: !slackContext,
-      // 使用 Claude Code 的完整系统提示和工具集
-      systemPrompt: { type: 'preset', preset: 'claude_code' },
-      // 加载项目的 CLAUDE.md 和用户设置
+      systemPrompt,
       settingSources: ['user', 'project', 'local'] as any,
-      // 捕获子进程 stderr 到日志
       stderr: (data: string) => {
         this.logger.error('Claude CLI stderr', { stderr: data.trim() });
       },
     };
 
-    // Add permission prompt tool if we have Slack context
     if (slackContext) {
       options.permissionPromptToolName = 'mcp__permission-prompt__permission_prompt';
       this.logger.debug('Added permission prompt tool for Slack integration', slackContext);
@@ -65,10 +89,9 @@ export class ClaudeHandler {
       options.cwd = workingDirectory;
     }
 
-    // Add MCP server configuration if available
+    // MCP servers
     const mcpServers = this.mcpManager.getServerConfiguration();
 
-    // Add permission prompt server if we have Slack context
     if (slackContext) {
       const permissionServerPath = path.resolve(process.cwd(), 'src', 'permission-mcp-server.ts');
       const permissionServer = {
@@ -77,16 +100,14 @@ export class ClaudeHandler {
           args: ['tsx', permissionServerPath],
           env: {
             SLACK_BOT_TOKEN: process.env.SLACK_BOT_TOKEN,
-            SLACK_CONTEXT: JSON.stringify(slackContext)
-          }
-        }
+            SLACK_CONTEXT: JSON.stringify(slackContext),
+          },
+        },
       };
 
-      if (mcpServers) {
-        options.mcpServers = { ...mcpServers, ...permissionServer };
-      } else {
-        options.mcpServers = permissionServer;
-      }
+      options.mcpServers = mcpServers
+        ? { ...mcpServers, ...permissionServer }
+        : permissionServer;
     } else if (mcpServers && Object.keys(mcpServers).length > 0) {
       options.mcpServers = mcpServers;
     }
@@ -119,21 +140,19 @@ export class ClaudeHandler {
 
     const envDebugInfo = getClaudeEnvDebugInfo();
     this.logger.info('Claude SDK environment state before query', envDebugInfo);
-    this.logger.info('Starting Claude query', {
+    this.logger.info('Starting Claude query (SDK mode)', {
       promptLength: prompt.length,
       promptPreview: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
       workingDirectory: options.cwd || 'not set',
       hasSessionId: !!options.resume,
       permissionMode: options.permissionMode,
       mcpServerCount: options.mcpServers ? Object.keys(options.mcpServers).length : 0,
+      hasAppendSystemPrompt: !!appendSystemPrompt,
     });
 
     try {
       this.logger.debug('Calling @anthropic-ai/claude-agent-sdk query()...');
-      for await (const message of query({
-        prompt,
-        options,
-      })) {
+      for await (const message of query({ prompt, options })) {
         if (message.type === 'system' && message.subtype === 'init') {
           if (session) {
             session.sessionId = message.session_id;
@@ -162,6 +181,74 @@ export class ClaudeHandler {
       }
 
       throw error;
+    }
+  }
+
+  private async *streamQueryLocal(
+    prompt: string,
+    session?: ConversationSession,
+    abortController?: AbortController,
+    workingDirectory?: string,
+    slackContext?: { channel: string; threadTs?: string; user: string },
+    appendSystemPrompt?: string,
+  ): AsyncGenerator<SDKMessage, void, unknown> {
+    // 构建 MCP config 临时文件（如果有 MCP servers）
+    let mcpConfigPath: string | undefined;
+    const mcpServers = this.mcpManager.getServerConfiguration();
+    if (mcpServers && Object.keys(mcpServers).length > 0) {
+      const tmpFile = path.join(os.tmpdir(), `claude-mcp-${Date.now()}.json`);
+      fs.writeFileSync(tmpFile, JSON.stringify({ mcpServers }, null, 2));
+      mcpConfigPath = tmpFile;
+    }
+
+    const allowedTools = this.mcpManager.getDefaultAllowedTools();
+
+    const permissionMode = slackContext ? 'default' : 'bypassPermissions';
+
+    this.logger.info('Starting Claude query (local CLI mode)', {
+      promptLength: prompt.length,
+      promptPreview: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+      workingDirectory: workingDirectory || 'not set',
+      hasSessionId: !!session?.sessionId,
+      permissionMode,
+      hasMcpConfig: !!mcpConfigPath,
+      hasAppendSystemPrompt: !!appendSystemPrompt,
+    });
+
+    try {
+      for await (const message of this.localHandler!.streamQuery({
+        prompt,
+        cwd: workingDirectory,
+        sessionId: session?.sessionId,
+        abortController,
+        appendSystemPrompt,
+        allowedTools: allowedTools.length > 0 ? allowedTools : undefined,
+        mcpConfigPath,
+        permissionMode,
+      })) {
+        // 从 init 消息中捕获 session ID
+        if (message.type === 'system' && (message as any).subtype === 'init') {
+          if (session) {
+            session.sessionId = message.session_id;
+            this.logger.info('Session initialized (local)', {
+              sessionId: message.session_id,
+            });
+          }
+        }
+        yield message;
+      }
+    } catch (error) {
+      this.logger.error('Error in local Claude query', error);
+      throw error;
+    } finally {
+      // 清理临时 MCP config 文件
+      if (mcpConfigPath) {
+        try {
+          fs.unlinkSync(mcpConfigPath);
+        } catch {
+          // ignore
+        }
+      }
     }
   }
 
