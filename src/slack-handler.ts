@@ -6,6 +6,7 @@ import { WorkingDirectoryManager } from './working-directory-manager';
 import { FileHandler, ProcessedFile } from './file-handler';
 import { TodoManager, Todo } from './todo-manager';
 import { McpManager } from './mcp-manager';
+import { SkillManager } from './skill-manager';
 import { permissionServer } from './permission-mcp-server';
 import { config } from './config';
 
@@ -35,6 +36,7 @@ export class SlackHandler {
   private fileHandler: FileHandler;
   private todoManager: TodoManager;
   private mcpManager: McpManager;
+  private skillManager: SkillManager;
   private todoMessages: Map<string, string> = new Map(); // sessionKey -> messageTs
   private originalMessages: Map<string, { channel: string; ts: string }> = new Map(); // sessionKey -> original message info
   private currentReactions: Map<string, string> = new Map(); // sessionKey -> current emoji
@@ -47,6 +49,7 @@ export class SlackHandler {
     this.workingDirManager = new WorkingDirectoryManager();
     this.fileHandler = new FileHandler();
     this.todoManager = new TodoManager();
+    this.skillManager = new SkillManager();
   }
 
   async handleMessage(event: MessageEvent, say: any) {
@@ -147,6 +150,27 @@ export class SlackHandler {
       return;
     }
 
+    // Check if this is a skills list command
+    if (text && this.skillManager.isListCommand(text)) {
+      await say({
+        text: this.skillManager.formatSkillList(),
+        thread_ts: thread_ts || ts,
+      });
+      return;
+    }
+
+    // Check for skill trigger
+    let userPrompt = text || '';
+    let appendSystemPrompt: string | undefined;
+    if (text) {
+      const skillMatch = this.skillManager.parseMessage(text);
+      if (skillMatch) {
+        this.logger.info('Skill triggered', { skill: skillMatch.skill.name, userPrompt: skillMatch.userPrompt.substring(0, 100) });
+        userPrompt = skillMatch.userPrompt;
+        appendSystemPrompt = skillMatch.skill.systemPrompt;
+      }
+    }
+
     // Check if we have a working directory set
     const isDM = channel.startsWith('D');
     const workingDirectory = this.workingDirManager.getWorkingDirectory(
@@ -197,9 +221,9 @@ export class SlackHandler {
 
     try {
       // Prepare the prompt with file attachments
-      const finalPrompt = processedFiles.length > 0 
-        ? await this.fileHandler.formatFilePrompt(processedFiles, text || '')
-        : text || '';
+      const finalPrompt = processedFiles.length > 0
+        ? await this.fileHandler.formatFilePrompt(processedFiles, userPrompt)
+        : userPrompt;
 
       this.logger.info('Sending query to Claude Code SDK', { 
         prompt: finalPrompt.substring(0, 200) + (finalPrompt.length > 200 ? '...' : ''), 
@@ -225,7 +249,7 @@ export class SlackHandler {
         user
       };
       
-      for await (const message of this.claudeHandler.streamQuery(finalPrompt, session, abortController, workingDirectory, slackContext)) {
+      for await (const message of this.claudeHandler.streamQuery(finalPrompt, session, abortController, workingDirectory, slackContext, appendSystemPrompt)) {
         if (abortController.signal.aborted) break;
 
         this.logger.debug('Received message from Claude SDK', {

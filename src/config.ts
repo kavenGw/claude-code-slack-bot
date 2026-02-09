@@ -12,6 +12,8 @@ export const config = {
     apiKey: process.env.ANTHROPIC_API_KEY!,
   },
   claude: {
+    mode: (process.env.CLAUDE_MODE || 'sdk') as 'sdk' | 'local',
+    cliPath: process.env.CLAUDE_CLI_PATH || 'claude',
     useBedrock: process.env.CLAUDE_CODE_USE_BEDROCK === '1',
     useVertex: process.env.CLAUDE_CODE_USE_VERTEX === '1',
   },
@@ -35,6 +37,11 @@ export function validateConfig() {
 
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+
+  // Local mode doesn't need any API keys
+  if (config.claude.mode === 'local') {
+    return;
   }
 
   // Validate OpenRouter configuration if enabled

@@ -51,10 +51,12 @@ async function start() {
     await app.start();
     logger.info('⚡️ Claude Code Slack bot is running!');
     logger.info('Configuration:', {
+      claudeMode: config.claude.mode,
+      claudeCliPath: config.claude.mode === 'local' ? config.claude.cliPath : undefined,
       usingBedrock: config.claude.useBedrock,
       usingVertex: config.claude.useVertex,
       usingOpenRouter: config.openRouter.enabled,
-      usingAnthropicAPI: !config.claude.useBedrock && !config.claude.useVertex && !config.openRouter.enabled,
+      usingAnthropicAPI: config.claude.mode === 'sdk' && !config.claude.useBedrock && !config.claude.useVertex && !config.openRouter.enabled,
       openRouterBaseUrl: config.openRouter.enabled ? config.openRouter.baseUrl : undefined,
       debugMode: config.debug,
       baseDirectory: config.baseDirectory || 'not set',
